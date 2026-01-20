@@ -6,16 +6,16 @@ const glados = async () => {
     try {
       const common = {
         'cookie': cookie,
-        'referer': 'https://glados.rocks/console/checkin',
+        'referer': 'https://glados.cloud/console/checkin',
         'user-agent': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)',
       }
-      const action = await fetch('https://glados.rocks/api/user/checkin', {
+      const action = await fetch('https://glados.cloud/api/user/checkin', {
         method: 'POST',
         headers: { ...common, 'content-type': 'application/json' },
-        body: '{"token":"glados.one"}',
+        body: '{"token":"glados.cloud"}',
       }).then((r) => r.json())
       if (action?.code) throw new Error(action?.message)
-      const status = await fetch('https://glados.rocks/api/user/status', {
+      const status = await fetch('https://glados.cloud/api/user/status', {
         method: 'GET',
         headers: { ...common },
       }).then((r) => r.json())
