@@ -1,21 +1,24 @@
 const glados = async () => {
   const notice = []
   if (!process.env.GLADOS) return
-  for (const cookie of String(process.env.GLADOS).split('\n')) {
-    if (!cookie) continue
+  // GLaDOS 签到会校验 UA 是否与登录时的浏览器一致, 多帐号时按行与 GLADOS 一一对应
+  const agents = String(process.env.GLADOS_UA || '').split('\n').filter(Boolean)
+  const cookies = String(process.env.GLADOS).split('\n').filter(Boolean)
+  for (const [index, cookie] of cookies.entries()) {
     try {
+      const domain = process.env.DOMAIN || 'glados.cloud'
       const common = {
         'cookie': cookie,
-        'referer': 'https://glados.cloud/console/checkin',
-        'user-agent': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)',
+        'referer': `https://${domain}/console/checkin`,
+        'user-agent': agents[index] || agents[0] || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
       }
-      const action = await fetch('https://glados.cloud/api/user/checkin', {
+      const action = await fetch(`https://${domain}/api/user/checkin`, {
         method: 'POST',
         headers: { ...common, 'content-type': 'application/json' },
-        body: '{"token":"glados.cloud"}',
+        body: JSON.stringify({ token: domain }),
       }).then((r) => r.json())
-      if (action?.code) throw new Error(action?.message)
-      const status = await fetch('https://glados.cloud/api/user/status', {
+      if (action?.code) throw new Error(`${action?.message} (code=${action?.code}${action?.reason ? ', reason=' + action.reason : ''})`)
+      const status = await fetch(`https://${domain}/api/user/status`, {
         method: 'GET',
         headers: { ...common },
       }).then((r) => r.json())
