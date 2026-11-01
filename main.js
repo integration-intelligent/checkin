@@ -11,10 +11,24 @@ const DEFAULT_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
 
 // ========== Cookie 结构诊断 ==========
-// GLaDOS 登录态由多个 Cookie 共同组成，例如：
-//   koa.sess / koa.sess.sig / gld_sess / gld_sess.sig / gld_accts / gld_accts.sig
-// 这里只解析出「字段名」用于日志自检，不输出任何字段值，避免泄露密钥。
-const IMPORTANT_COOKIE_NAMES = ['koa.sess', 'gld_sess', 'gld_accts']
+// GLaDOS 登录态由多个 Cookie 共同组成。新版站点用冒号命名（koa:sess / gld:sess），
+// 旧版用点与下划线（koa.sess / gld_sess），两种命名都要兼容。
+// 实测结论（2026-11-01 对 /api/user/status 逐组验证）：
+//   必需 4 项 → koa:sess、koa:sess.sig、gld:sess、gld:sess.sig
+//   缺任意一项都会返回 {"code":-2,"message":"没有权限"}
+//   gld:accts / gld:accts.sig 为浏览器常带的附加项，有则更完整，缺失不影响鉴权
+// 这里只解析「字段名」用于日志自检，不输出任何字段值，避免泄露密钥。
+const REQUIRED_COOKIE_FIELDS = [
+  { label: 'koa:sess', variants: ['koa:sess', 'koa.sess'] },
+  { label: 'koa:sess.sig', variants: ['koa:sess.sig', 'koa.sess.sig'] },
+  { label: 'gld:sess', variants: ['gld:sess', 'gld_sess'] },
+  { label: 'gld:sess.sig', variants: ['gld:sess.sig', 'gld_sess.sig'] },
+]
+
+const OPTIONAL_COOKIE_FIELDS = [
+  { label: 'gld:accts', variants: ['gld:accts', 'gld_accts'] },
+  { label: 'gld:accts.sig', variants: ['gld:accts.sig', 'gld_accts.sig'] },
+]
 
 const parseCookieNames = (cookie) =>
   String(cookie || '')
@@ -31,11 +45,13 @@ const diagnoseCookie = (cookie) => {
   const raw = String(cookie || '')
   const names = parseCookieNames(raw)
   const named = names.filter((n) => !n.startsWith('(缺少name)'))
+  const has = (group) => group.variants.some((v) => named.includes(v))
   return {
     names,
     named,
     hasAssign: raw.includes('='),
-    missing: IMPORTANT_COOKIE_NAMES.filter((n) => !named.includes(n)),
+    missing: REQUIRED_COOKIE_FIELDS.filter((g) => !has(g)).map((g) => g.label),
+    optionalMissing: OPTIONAL_COOKIE_FIELDS.filter((g) => !has(g)).map((g) => g.label),
   }
 }
 
@@ -129,15 +145,11 @@ const glados = async () => {
     }
     if (diag.missing.length) {
       console.log(
-        `[${tag}] ⚠️ 缺少常见字段: ${diag.missing.join('、')}（若签到返回 code=-2，请补齐后再试）`
+        `[${tag}] ⚠️ 缺少必需字段: ${diag.missing.join('、')}——实测缺任意一项都会返回 code=-2，请重新完整复制 Cookie`
       )
-    }
-    const colonNames = diag.named.filter((n) => n.includes(':'))
-    if (colonNames.length) {
+    } else if (diag.optionalMissing.length) {
       console.log(
-        `[${tag}] ⚠️ 字段名含冒号: ${colonNames.join('、')}——浏览器里的真实字段名用点/下划线，` +
-          `应为 koa.sess / koa.sess.sig / gld_sess / gld_sess.sig / gld_accts / gld_accts.sig。` +
-          `请从 DevTools → Network → Cookie 请求头整行复制，不要手动输入字段名`
+        `[${tag}] ℹ️ 未包含可选项: ${diag.optionalMissing.join('、')}（不影响鉴权，浏览器复制时通常会带上）`
       )
     }
 
