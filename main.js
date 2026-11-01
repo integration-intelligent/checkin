@@ -14,18 +14,18 @@ const DEFAULT_UA =
 // GLaDOS 登录态由多个 Cookie 共同组成。新版站点用冒号命名（koa:sess / gld:sess），
 // 旧版用点与下划线（koa.sess / gld_sess），两种命名都要兼容。
 // 实测结论（2026-11-01 对 /api/user/status 逐组验证）：
-//   必需 4 项 → koa:sess、koa:sess.sig、gld:sess、gld:sess.sig
-//   缺任意一项都会返回 {"code":-2,"message":"没有权限"}
-//   gld:accts / gld:accts.sig 为浏览器常带的附加项，有则更完整，缺失不影响鉴权
+//   必需 2 项 → gld:sess、gld:sess.sig（缺任一项或 sig 不匹配都返回 code=-2）
+//   可选 4 项 → koa:sess、koa:sess.sig、gld:accts、gld:accts.sig
+//   新版站点只下发 gld: 系字段即可鉴权，koa: 系为旧版遗留，缺失不影响
 // 这里只解析「字段名」用于日志自检，不输出任何字段值，避免泄露密钥。
 const REQUIRED_COOKIE_FIELDS = [
-  { label: 'koa:sess', variants: ['koa:sess', 'koa.sess'] },
-  { label: 'koa:sess.sig', variants: ['koa:sess.sig', 'koa.sess.sig'] },
   { label: 'gld:sess', variants: ['gld:sess', 'gld_sess'] },
   { label: 'gld:sess.sig', variants: ['gld:sess.sig', 'gld_sess.sig'] },
 ]
 
 const OPTIONAL_COOKIE_FIELDS = [
+  { label: 'koa:sess', variants: ['koa:sess', 'koa.sess'] },
+  { label: 'koa:sess.sig', variants: ['koa:sess.sig', 'koa.sess.sig'] },
   { label: 'gld:accts', variants: ['gld:accts', 'gld_accts'] },
   { label: 'gld:accts.sig', variants: ['gld:accts.sig', 'gld_accts.sig'] },
 ]
