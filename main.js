@@ -10,6 +10,35 @@ const mask = (str, startLen = 4, endLen = 4) => {
 const DEFAULT_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
 
+// ========== Cookie 结构诊断 ==========
+// GLaDOS 登录态由多个 Cookie 共同组成，例如：
+//   koa.sess / koa.sess.sig / gld_sess / gld_sess.sig / gld_accts / gld_accts.sig
+// 这里只解析出「字段名」用于日志自检，不输出任何字段值，避免泄露密钥。
+const IMPORTANT_COOKIE_NAMES = ['koa.sess', 'gld_sess', 'gld_accts']
+
+const parseCookieNames = (cookie) =>
+  String(cookie || '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const eq = part.indexOf('=')
+      if (eq === -1) return `(缺少name)${part.slice(0, 4)}…`
+      return part.slice(0, eq).trim()
+    })
+
+const diagnoseCookie = (cookie) => {
+  const raw = String(cookie || '')
+  const names = parseCookieNames(raw)
+  const named = names.filter((n) => !n.startsWith('(缺少name)'))
+  return {
+    names,
+    named,
+    hasAssign: raw.includes('='),
+    missing: IMPORTANT_COOKIE_NAMES.filter((n) => !named.includes(n)),
+  }
+}
+
 // ========== 多账号环境变量收集 ==========
 // 规则：GLADOS、GLADOS2、GLADOS3 …… 各自独立存放账号 Cookie，互不覆盖。
 // 单个环境变量内仍支持用换行分隔多个 Cookie（完全兼容原有写法）。
@@ -20,7 +49,7 @@ const MAX_ACCOUNT_SLOTS = 20
 const splitEnvLines = (value) =>
   String(value ?? '')
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line) => line.trim().replace(/^["']|["']$/g, '').trim())
     .filter(Boolean)
 
 const resolveUaList = (slot) => {
@@ -28,10 +57,10 @@ const resolveUaList = (slot) => {
     slot === 1 ? ['GLADOS_UA'] : [`GLADOS_UA${slot}`, `GLADOS${slot}_UA`]
   for (const name of candidates) {
     const lines = splitEnvLines(process.env[name])
-    if (lines.length) return lines
+    if (lines.length) return { list: lines, source: name }
   }
   // 该槽位未单独配置 UA 时，回退到通用 GLADOS_UA（按行对应）
-  return splitEnvLines(process.env.GLADOS_UA)
+  return { list: splitEnvLines(process.env.GLADOS_UA), source: 'GLADOS_UA(回退)' }
 }
 
 const collectAccounts = () => {
@@ -43,7 +72,7 @@ const collectAccounts = () => {
     const cookies = splitEnvLines(process.env[envName])
     if (!cookies.length) continue
 
-    const uaList = resolveUaList(slot)
+    const { list: uaList, source: uaSource } = resolveUaList(slot)
     cookies.forEach((cookie, i) => {
       if (seen.has(cookie)) {
         console.log(
@@ -52,10 +81,12 @@ const collectAccounts = () => {
         return
       }
       seen.set(cookie, envName)
+      const ua = uaList[i] || uaList[0] || DEFAULT_UA
       accounts.push({
         envName,
         cookie,
-        ua: uaList[i] || uaList[0] || DEFAULT_UA,
+        ua,
+        uaSource: ua === DEFAULT_UA ? '内置默认UA' : uaSource,
       })
     })
   }
@@ -87,12 +118,27 @@ const glados = async () => {
     const tag = `账号 ${accountNo}|${account.envName}`
     console.log(`\n[${tag}] ---------- 开始处理 ----------`)
     console.log(`[${tag}] Cookie: ${mask(account.cookie)}`)
+
+    // Cookie 结构自检：只输出字段名，不输出字段值
+    const diag = diagnoseCookie(account.cookie)
+    console.log(`[${tag}] Cookie 字段(${diag.named.length}): ${diag.named.join('、') || '无'}`)
+    if (!diag.hasAssign) {
+      console.log(
+        `[${tag}] ⚠️ Cookie 不含 "name=value" 结构，可能只粘贴了值；请从 DevTools → Network → 该请求的 Cookie 请求头整行复制`
+      )
+    }
+    if (diag.missing.length) {
+      console.log(
+        `[${tag}] ⚠️ 缺少常见字段: ${diag.missing.join('、')}（若签到返回 code=-2，请补齐后再试）`
+      )
+    }
+
     try {
       const domain = process.env.DOMAIN || 'glados.cloud'
       const ua = account.ua
 
       console.log(`[${tag}] 目标域名: ${domain}`)
-      console.log(`[${tag}] UA: ${mask(ua, 8, 8)}`)
+      console.log(`[${tag}] UA(${account.uaSource}): ${mask(ua, 8, 8)}`)
       const common = {
         'cookie': account.cookie,
         'referer': `https://${domain}/console/checkin`,
