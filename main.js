@@ -132,6 +132,14 @@ const glados = async () => {
         `[${tag}] ⚠️ 缺少常见字段: ${diag.missing.join('、')}（若签到返回 code=-2，请补齐后再试）`
       )
     }
+    const colonNames = diag.named.filter((n) => n.includes(':'))
+    if (colonNames.length) {
+      console.log(
+        `[${tag}] ⚠️ 字段名含冒号: ${colonNames.join('、')}——浏览器里的真实字段名用点/下划线，` +
+          `应为 koa.sess / koa.sess.sig / gld_sess / gld_sess.sig / gld_accts / gld_accts.sig。` +
+          `请从 DevTools → Network → Cookie 请求头整行复制，不要手动输入字段名`
+      )
+    }
 
     try {
       const domain = process.env.DOMAIN || 'glados.cloud'
