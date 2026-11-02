@@ -19,5 +19,13 @@ jobs:
         env:
           GLADOS: ${{ secrets.GLADOS }}
           GLADOS_UA: ${{ secrets.GLADOS_UA }}
+          # 多账号：在仓库 Secrets 里按需新增 GLADOS2 / GLADOS3 / …… 即可，
+          # 未配置时值为空字符串，脚本会自动跳过，不影响原有账号。
+          GLADOS2: ${{ secrets.GLADOS2 }}
+          GLADOS_UA2: ${{ secrets.GLADOS_UA2 }}
+          GLADOS2_UA: ${{ secrets.GLADOS2_UA }}
+          GLADOS3: ${{ secrets.GLADOS3 }}
+          GLADOS_UA3: ${{ secrets.GLADOS_UA3 }}
+          GLADOS3_UA: ${{ secrets.GLADOS3_UA }}
           DOMAIN: ${{ secrets.DOMAIN }}
           NOTIFY: ${{ secrets.NOTIFY }}
