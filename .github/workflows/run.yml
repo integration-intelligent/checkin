@@ -29,3 +29,4 @@ jobs:
           GLADOS3_UA: ${{ secrets.GLADOS3_UA }}
           DOMAIN: ${{ secrets.DOMAIN }}
           NOTIFY: ${{ secrets.NOTIFY }}
+          AUTO_EXCHANGE: ${{ secrets.AUTO_EXCHANGE }}
