@@ -1,21 +1,40 @@
 name: run
 
+# 定时说明
+# ---------------------------------------------------------------------------
+# GitHub Actions 的 cron 使用 UTC，且官方明确说明「高负载时会延迟，不保证准时」。
+# 实测延迟通常在数分钟到 1 小时之间，整点（每小时 00 分）最拥堵。
+# 下面这条 = UTC 16:10 = 北京时间次日 00:10，刻意避开整点。
+#
+# 【重要】不要保留 push 触发器：任何一次 commit/push 都会立刻跑一次签到，
+# 这是「签到时间随机」的最主要原因。改由 schedule + 手动 dispatch 触发。
+# ---------------------------------------------------------------------------
 on:
   workflow_dispatch:
-  push:
   schedule:
-    - cron: 10 16 * * *
+    - cron: '10 16 * * *'
+
+# 同一时间只允许一个签到实例，避免重复签到 / 并发冲突
+concurrency:
+  group: glados-checkin
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 18
-      - run: npm ci
-      - run: npm run main
+          node-version: 20
+      - name: Install
+        run: npm ci || npm install
+      - name: Checkin
+        run: npm run main
         env:
           GLADOS: ${{ secrets.GLADOS }}
           GLADOS_UA: ${{ secrets.GLADOS_UA }}
@@ -29,3 +48,5 @@ jobs:
           GLADOS3_UA: ${{ secrets.GLADOS3_UA }}
           DOMAIN: ${{ secrets.DOMAIN }}
           NOTIFY: ${{ secrets.NOTIFY }}
+          AUTO_EXCHANGE: ${{ secrets.AUTO_EXCHANGE }}
+          EXCHANGE_THRESHOLD: ${{ secrets.EXCHANGE_THRESHOLD }}
