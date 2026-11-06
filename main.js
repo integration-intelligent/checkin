@@ -313,9 +313,17 @@ const glados = async () => {
         try {
           const iqiRes = await fetch(`https://${domain}/api/user/iqi`, { method: 'GET', headers })
           const iqi = await iqiRes.json()
-          if (iqi?.code === 0) iqiScore = iqi?.quality?.score ?? null
-        } catch {
-          /* IQI 非关键路径 */
+          console.log(`[${tag}] IQI 接口: http=${iqiRes.status} code=${iqi?.code ?? '无'}`)
+          if (iqi?.code === 0) {
+            iqiScore = iqi?.quality?.score ?? iqi?.score ?? null
+            if (iqiScore == null) {
+              console.log(`[${tag}] IQI 返回结构: ${JSON.stringify(iqi).slice(0, 300)}`)
+            }
+          } else {
+            console.log(`[${tag}] IQI 取值失败: ${iqi?.message || '未知'} (code=${iqi?.code})`)
+          }
+        } catch (iqiErr) {
+          console.log(`[${tag}] IQI 请求异常: ${iqiErr.message}`)
         }
         const pB = planBonus(status?.data?.vip ?? status?.vip)
         const sB = streakBonus(streak)
