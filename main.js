@@ -315,9 +315,13 @@ const glados = async () => {
           const iqi = await iqiRes.json()
           console.log(`[${tag}] IQI 接口: http=${iqiRes.status} code=${iqi?.code ?? '无'}`)
           if (iqi?.code === 0) {
-            iqiScore = iqi?.quality?.score ?? iqi?.score ?? null
+            // 实测结构：{ code:0, data:{ quality:{ score, level }, bandwidth, latency, benchmark } }
+            iqiScore =
+              iqi?.data?.quality?.score ?? iqi?.quality?.score ?? iqi?.data?.score ?? null
             if (iqiScore == null) {
               console.log(`[${tag}] IQI 返回结构: ${JSON.stringify(iqi).slice(0, 300)}`)
+            } else {
+              console.log(`[${tag}] IQI 光缆指数: ${iqiScore} (${iqi?.data?.quality?.level || '?'})`)
             }
           } else {
             console.log(`[${tag}] IQI 取值失败: ${iqi?.message || '未知'} (code=${iqi?.code})`)
