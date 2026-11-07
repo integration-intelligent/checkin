@@ -366,8 +366,12 @@ const glados = async () => {
           `套餐+${pB} / 连续+${sB} / 光缆+${cB}` +
           (iqiScore != null ? `（IQI=${iqiScore}）` : '（IQI 未取到）')
         console.log(`[${tag}] 📈 加成构成: ${bonusLine}`)
-        if (iqiScore != null && iqiScore <= 80) {
-          console.log(`[${tag}] 🎯 当前光缆指数处于低谷，Cable 加成已达最高档 +8`)
+        if (iqiScore != null) {
+          if (iqiScore < 80) {
+            console.log(`[${tag}] 🎯 当前光缆指数处于低谷，Cable 加成已达最高档 +8`)
+          } else if (iqiScore < 85) {
+            console.log(`[${tag}] 光缆指数 ${iqiScore}，Cable 为 +5 档（低于 80 才能拿到 +8）`)
+          }
         }
 
         // 5. 交叉校验：识别「接口成功但实际降级」的情况
