@@ -46,6 +46,32 @@ const cableBonus = (score) => {
   return 1
 }
 
+// ========== 判定辅助：服务端是否「看起来成功、实际降级」 ==========
+// 协议变更时服务端未必直接报错，可能返回 code:0 但只给 Base 保底分，
+// 或返回 code:1 假装已签到。因此不能只看 code，必须交叉核对得分与流水。
+const BEIJING_OFFSET_MS = 8 * 3600 * 1000
+
+const beijingDate = (input) => {
+  if (input == null) return null
+  const ms = typeof input === 'number' ? (input < 1e12 ? input * 1000 : input) : new Date(input).getTime()
+  if (!Number.isFinite(ms)) return null
+  return new Date(ms + BEIJING_OFFSET_MS).toISOString().slice(0, 10)
+}
+
+const todayBeijing = () => beijingDate(Date.now())
+
+// 从积分流水里判断今天是否真有记录：true / false / null(结构无法解析)
+const hasRecordToday = (list) => {
+  if (!Array.isArray(list) || list.length === 0) return null
+  const today = todayBeijing()
+  const dates = list
+    .slice(0, 8)
+    .map((it) => beijingDate(it?.time ?? it?.createdAt ?? it?.created_at ?? it?.date))
+    .filter(Boolean)
+  if (!dates.length) return null
+  return dates.includes(today)
+}
+
 // ========== 浏览器请求头构造 ==========
 // 浏览器发起签到时会带上 sec-ch-ua / sec-fetch-* 等一组头部，
 // 这些头部与 UA 中的平台、内核大版本必须自洽，否则容易被判为伪造。
@@ -213,6 +239,7 @@ const glados = async () => {
   const pointsSummary = []
   let successCount = 0
   let failCount = 0
+  let criticalAnomalies = 0
   console.log('========== GLaDOS 签到任务开始 ==========')
 
   const accounts = collectAccounts()
@@ -228,6 +255,7 @@ const glados = async () => {
   for (const [index, account] of accounts.entries()) {
     const accountNo = index + 1
     const tag = `账号 ${accountNo}|${account.envName}`
+    const anomalies = []
     console.log(`\n[${tag}] ---------- 开始处理 ----------`)
     console.log(`[${tag}] Cookie: ${mask(account.cookie)}`)
 
@@ -272,10 +300,11 @@ const glados = async () => {
           `${action?.message || '签到失败'} (code=${action.code}${action?.reason ? ', reason=' + action.reason : ''})`
         )
       }
+      let gained = null
       if (alreadyCheckedIn) {
         console.log(`[${tag}] 今日已签到过，继续查询剩余天数与积分...`)
       } else {
-        const gained = Number(action?.points)
+        gained = Number(action?.points)
         console.log(
           `[${tag}] 本次获得积分: ${Number.isFinite(gained) ? gained + ' 分' : '未返回'} | 服务端消息: ${action?.message || ''}`
         )
@@ -305,6 +334,7 @@ const glados = async () => {
         }
         currentPoints = Number(pointsData?.points) || 0
         const streak = pointsData?.streak ?? 0
+        const history = pointsData?.history || pointsData?.list || []
         console.log(`[${tag}] 💰 当前积分: ${currentPoints} 点 | 连续签到: ${streak} 天`)
         pointsSummary.push(`账号${accountNo}(${account.envName}): ${currentPoints} 点 / 连续 ${streak} 天`)
 
@@ -338,6 +368,45 @@ const glados = async () => {
         console.log(`[${tag}] 📈 加成构成: ${bonusLine}`)
         if (iqiScore != null && iqiScore <= 80) {
           console.log(`[${tag}] 🎯 当前光缆指数处于低谷，Cable 加成已达最高档 +8`)
+        }
+
+        // 5. 交叉校验：识别「接口成功但实际降级」的情况
+        const expectedMin = 1 + pB + sB + cB
+        if (!alreadyCheckedIn && Number.isFinite(gained)) {
+          if (gained < expectedMin) {
+            anomalies.push({
+              level: 'critical',
+              text: `得分低于理论下限：实得 ${gained} 分 < ${expectedMin} 分（Base1+套餐${pB}+连续${sB}+光缆${cB}）`,
+            })
+            console.log(
+              `[${tag}] 🚨 得分异常: ${gained} 分低于理论下限 ${expectedMin} 分，存在加成项未生效`
+            )
+          } else {
+            console.log(`[${tag}] ✅ 得分校验通过: ${gained} ≥ 理论下限 ${expectedMin}`)
+          }
+        }
+        if (!alreadyCheckedIn && Number(streak) === 0) {
+          anomalies.push({
+            level: 'warning',
+            text: '签到成功但连续天数为 0，Streak 加成将无法累计',
+          })
+          console.log(`[${tag}] 🚨 连续天数异常: 签到成功却 streak=0`)
+        }
+        if (alreadyCheckedIn) {
+          const recorded = hasRecordToday(history)
+          if (recorded === false) {
+            anomalies.push({
+              level: 'critical',
+              text: '返回「今日已签到」但积分流水中没有今天的记录',
+            })
+            console.log(
+              `[${tag}] 🚨 状态矛盾: 响应称今日已签到，但流水无今日记录，服务端可能改用其他 code 表达降级`
+            )
+          } else if (recorded === null) {
+            console.log(`[${tag}] ℹ️ 积分流水结构无法解析，跳过今日记录校验`)
+          } else {
+            console.log(`[${tag}] ✅ 已签到状态校验通过: 流水含今日记录`)
+          }
         }
       } catch (pointsErr) {
         console.warn(`[${tag}] ⚠️ 积分查询失败: ${pointsErr.message}`)
@@ -377,12 +446,23 @@ const glados = async () => {
       console.log(`[${tag}] 返回消息: ${action?.message || ''}`)
       console.log(`[${tag}] 剩余天数: ${leftDays} 天`)
       console.log(`[${tag}] 当前积分: ${currentPoints != null ? currentPoints + ' 点' : '查询失败'}`)
-      notice.push(
+
+      if (anomalies.length) {
+        console.log(`[${tag}] ⚠️ 检出 ${anomalies.length} 项异常:`)
+        anomalies.forEach((item) => console.log(`[${tag}]    · [${item.level}] ${item.text}`))
+        criticalAnomalies += anomalies.filter((a) => a.level === 'critical').length
+      }
+
+      const summaryLines = [
         `【账号${accountNo}】签到成功`,
         `${alreadyCheckedIn ? '今日已签到过（无新增积分）' : action?.message}`,
         `剩余天数: ${leftDays} 天`,
-        `当前积分: ${currentPoints != null ? currentPoints + ' 点' : '查询失败'}${bonusLine ? ' | ' + bonusLine : ''}`
-      )
+        `当前积分: ${currentPoints != null ? currentPoints + ' 点' : '查询失败'}${bonusLine ? ' | ' + bonusLine : ''}`,
+      ]
+      if (anomalies.length) {
+        summaryLines.push(`⚠️ 异常提示: ${anomalies.map((a) => a.text).join('；')}`)
+      }
+      notice.push(...summaryLines)
       successCount++
     } catch (error) {
       console.error(`[${tag}] ❌ 签到失败`)
@@ -406,6 +486,10 @@ const glados = async () => {
   console.log('===================================')
   console.log('\n========== 签到任务处理完成 ==========')
   console.log(`📊 统计结果：成功 ${successCount} 个 | 失败 ${failCount} 个`)
+  if (criticalAnomalies > 0) {
+    console.error(`🚨 共检出 ${criticalAnomalies} 项严重异常，本次任务标记为失败`)
+    process.exitCode = 1
+  }
   return notice
 }
 

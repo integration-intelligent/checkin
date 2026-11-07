@@ -33,6 +33,15 @@ jobs:
           node-version: 20
       - name: Install
         run: npm ci || npm install
+
+      # 签到前先确认协议没变。宽松模式：只打印告警，不阻断签到，
+      # 避免误报导致漏签；严重变化由独立的 guard.yml 严格告警。
+      - name: Protocol Guard
+        run: node guard.js --soft
+        continue-on-error: true
+        env:
+          DOMAIN: ${{ secrets.DOMAIN }}
+
       - name: Checkin
         run: npm run main
         env:
