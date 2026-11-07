@@ -1,5 +1,9 @@
 # Checkin
 
+> **维护仓库**：[badarch47/glados_checkin](https://github.com/badarch47/glados_checkin)
+>
+> 本人是当前**积极维护者**。官方签到协议或计分规则一旦有变动，修复代码会**第一时间更新到上述仓库**。建议点 **Watch** 关注本仓库、顺手给个 **Star**，避免错过更新。
+
 GitHub Actions 实现 [GLaDOS][glados] 自动签到
 
 ([GLaDOS][glados] 可用邀请码: `BADSEVEN`, 双方都有奖励天数)
