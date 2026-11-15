@@ -3,6 +3,7 @@
 > **维护仓库**：[badarch47/glados_checkin](https://github.com/badarch47/glados_checkin)
 >
 > 本人是当前**积极维护者**。官方签到协议或计分规则一旦有变动，修复代码会**第一时间更新到上述仓库**。建议点 **Watch** 关注本仓库、顺手给个 **Star**，避免错过更新。
+> 官方实时关注此仓库，7号修改协议后又添加了cloudflare检测。为了避免官方彻底绝杀积分获取渠道，目前github action方案已经暂停更新，这里提一下后续方法既然检测浏览器和cf验证，直接用agent本地操作本机浏览器签到
 
 GitHub Actions 实现 [GLaDOS][glados] 自动签到
 
