@@ -1,0 +1,45 @@
+name: guard
+
+# 协议一致性检查
+# ---------------------------------------------------------------------------
+# 独立于签到任务运行，只做一件事：确认 GLaDOS 前端仍在用同一套 challenge/proof
+# 协议。发现变化时本 workflow 失败，GitHub 会向仓库 owner 发邮件通知。
+#
+# 为什么不放进 run.yml 做主阻断：
+#   签到前会跑一次宽松模式（--soft）只告警不阻断，避免误报导致漏签；
+#   这里用严格模式独立告警，两者互补。
+#
+# 时间：UTC 15:00 = 北京 23:00，比签到（UTC 16:10）早约 1 小时。
+# ---------------------------------------------------------------------------
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 15 * * *'
+
+concurrency:
+  group: glados-guard
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 协议一致性检查
+        run: node guard.js
+        env:
+          DOMAIN: ${{ secrets.DOMAIN }}
+
+      - name: 失败时提示
+        if: failure()
+        run: |
+          echo "::error::协议已变化，签到逻辑需要更新。请查看上方日志中的 [CRITICAL] 项。"
